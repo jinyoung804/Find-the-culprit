@@ -1,5 +1,8 @@
 let selectedLevel = null;
 
+const IMAGE_DIR = "../assets/image/";
+const DEFAULT_IMAGE = IMAGE_DIR + "file.png";
+
 // ---------- 폴더(난이도) 선택 ----------
 function initFolderSelection() {
     const items = document.querySelectorAll(".difficulty-item");
@@ -12,24 +15,41 @@ function initFolderSelection() {
     });
 }
 
-// 배경 키 → 실제 이미지 경로 매핑 (시나리오가 늘어날 때마다 여기 추가)
-// 배경 키 → 실제 이미지 경로 매핑
+// ---------- 배경 이미지 경로 ----------
+// 키는 전부 소문자로 적는다. (JSON의 background 값은 대소문자 상관없이 매칭됨)
+// 값은 assets/image 안의 "실제 파일명"과 대소문자까지 똑같이 적는다.
 const BACKGROUND_MAP = {
-    radio: "../assets/image/radio.png",
-    icecream: "../assets/image/icecream.png",
-    festival: "../assets/image/festival.png",
-    animal: "../assets/image/animal.png",
-    apartment: "../assets/image/apartment.png"
+    // 레벨 1
+    radio: "radio.png",
+    icecream: "icecream.png",
+    festival: "festivities.png",
+    animal: "animal.png",
+    apartment: "apartment.png",
+    
+    // 레벨 2
+    workshop: "Workshop.png",
+    ticket: "Ticket.png",
+    yoga: "Yoga.png",
+    flea_market: "Flea_Market.png",
+    test: "test.png"
 };
 
 function getBackgroundPath(bgKey) {
-    return BACKGROUND_MAP[bgKey] || "../assets/image/file.png";
+    if (!bgKey) return DEFAULT_IMAGE;
+
+    // 1순위: 맵에 등록된 파일명
+    const mapped = BACKGROUND_MAP[String(bgKey).toLowerCase()];
+    if (mapped) return IMAGE_DIR + mapped;
+
+    // 2순위: 맵에 없으면 background 값을 그대로 파일명으로 사용
+    return `${IMAGE_DIR}${bgKey}.png`;
 }
 
 function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ---------- 룰렛 ----------
 // 룰렛에 넣을 아이템 배열 만들기 (마지막이 뽑힌 사건이 되도록)
 function buildReelList(dataList, chosenScenario, totalItems = 24) {
     const reel = [];
@@ -37,7 +57,7 @@ function buildReelList(dataList, chosenScenario, totalItems = 24) {
         const random = dataList[Math.floor(Math.random() * dataList.length)];
         reel.push(random);
     }
-    reel.push(chosenScenario); // 마지막 칸에 정답 고정
+    reel.push(chosenScenario); // 마지막 칸에 뽑힌 사건 고정
     return reel;
 }
 
@@ -47,11 +67,23 @@ function renderReel(reelList, chosenScenario) {
     track.style.transition = "none";
     track.style.transform = "translateX(0px)";
 
-    reelList.forEach((scenario) => {
+    reelList.forEach((scenario, index) => {
         const item = document.createElement("div");
         item.className = "roulette-item";
-        item.style.backgroundImage = `url(${getBackgroundPath(scenario.background)})`;
-        if (scenario === chosenScenario) {
+
+        const path = getBackgroundPath(scenario.background);
+        item.style.backgroundImage = `url("${path}")`;
+
+        // 이미지 파일이 없으면 기본 이미지로 대체
+        const testImg = new Image();
+        testImg.onerror = () => {
+            console.warn(`배경 이미지를 찾을 수 없음: ${path} (background: ${scenario.background})`);
+            item.style.backgroundImage = `url("${DEFAULT_IMAGE}")`;
+        };
+        testImg.src = path;
+
+        // 마지막 칸이 뽑힌 사건이므로 index로 판별 (같은 사건이 중복돼도 안전)
+        if (index === reelList.length - 1) {
             item.classList.add("chosen");
         }
         track.appendChild(item);
@@ -63,7 +95,7 @@ function spinReel() {
         const track = document.getElementById("roulette-track");
         const viewport = document.querySelector(".roulette-viewport");
 
-        const itemWidth = 420 + 16; // width + margin-right (위에서 바꾼 값과 반드시 일치시켜야 함)
+        const itemWidth = 420 + 16; // CSS의 width + margin-right와 반드시 일치
         const totalItems = track.children.length;
         const viewportWidth = viewport.offsetWidth;
 
@@ -118,18 +150,37 @@ async function playRevealAnimation(dataList, chosenScenario, level) {
 // ---------- "사건 파일 열기" 버튼 ----------
 function initOpenFileButton() {
     const openBtn = document.querySelector(".open-file-btn");
+    let isLoading = false; // 연타 방지
+
     openBtn.addEventListener("click", async () => {
+        if (isLoading) return;
+
         if (!selectedLevel) {
             alert("난이도를 먼저 선택해주세요.");
             return;
         }
 
-        const res = await fetch(`../data/level${selectedLevel}.json`);
-        const dataList = await res.json();
-        const chosenScenario =
-            dataList[Math.floor(Math.random() * dataList.length)];
+        isLoading = true;
+        try {
+            const res = await fetch(`../data/level${selectedLevel}.json`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        playRevealAnimation(dataList, chosenScenario, selectedLevel);
+            const dataList = await res.json();
+            if (!Array.isArray(dataList) || dataList.length === 0) {
+                alert("이 난이도에는 아직 사건이 없어요.");
+                isLoading = false;
+                return;
+            }
+
+            const chosenScenario =
+                dataList[Math.floor(Math.random() * dataList.length)];
+
+            await playRevealAnimation(dataList, chosenScenario, selectedLevel);
+        } catch (err) {
+            console.error("사건 데이터를 불러오지 못했습니다:", err);
+            alert("사건 데이터를 불러오지 못했어요. 파일 경로를 확인해주세요.");
+            isLoading = false;
+        }
     });
 }
 
