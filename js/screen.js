@@ -250,29 +250,58 @@ function renderStoryScene(level) {
     renderClueMarkers(level.clues, level.background);
 }
 
+// ---------- [추가] 힌트 구역 층을 "화면에 실제로 보이는 이미지"와 똑같은 크기/위치로 맞춤 ----------
+// 배경 이미지는 원래 코드 그대로 object-fit: cover 로 표시하고,
+// 힌트 구역 층만 이미지가 실제로 그려진 영역에 겹쳐 놓음.
+// 그래서 창 크기가 달라져도 이미지가 잘리는 대로 구역이 같이 움직여서 항상 같은 물건 위에 있음.
+// (position의 % 값은 "화면"이 아니라 "이미지 자체" 기준)
+function layoutClueLayer() {
+    const img = document.getElementById("bg-image");
+    const layer = document.getElementById("clue-markers");
+    if (!img || !layer || !img.naturalWidth) return;
+
+    const area = img.parentElement;
+    if (layer.parentElement !== area) area.appendChild(layer);
+
+    const W = area.clientWidth;
+    const H = area.clientHeight;
+    if (!W || !H) return; // 다른 화면이 켜져 있어서 크기를 잴 수 없을 때
+
+    const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+    const w = img.naturalWidth * scale;
+    const h = img.naturalHeight * scale;
+
+    layer.style.position = "absolute";
+    layer.style.width = w + "px";
+    layer.style.height = h + "px";
+    layer.style.left = (W - w) / 2 + "px";
+    layer.style.top = (H - h) / 2 + "px";
+}
+
 function renderClueMarkers(clues, bgKey) {
     const container = document.getElementById("clue-markers");
     container.innerHTML = "";
 
     clues.forEach((clue) => {
-        if (!KEY_ICON_MAP[clue.id]) {
-            console.warn(`열쇠 아이콘이 없는 clue 건너뜀: ${clue.id}`);
-            return;
-        }
-
-        const pos = getCluePosition(clue, bgKey);
+        // JSON 내부 position 사용
+        const pos = clue.position || { top: "50%", left: "50%", width: "80px", height: "80px" };
 
         const btn = document.createElement("button");
         btn.className = "clue-marker";
+
+        // 위치 및 너비/높이 동적 할당
         btn.style.top = pos.top;
         btn.style.left = pos.left;
-        btn.setAttribute("aria-label", clue.label);
+        btn.style.width = pos.width || "80px";
+        btn.style.height = pos.height || "80px";
 
-        const img = document.createElement("img");
-        img.src = KEY_ICON_MAP[clue.id];
-        img.alt = clue.label;
+        // 물건 모양대로 구역을 깎고 싶을 때: position에 "shape": "polygon(...)" 추가
+        if (pos.shape) btn.style.clipPath = pos.shape;
 
-        btn.appendChild(img);
+        // title 속성을 쓰면 브라우저 기본 말풍선이 떠서 쓰지 않음
+        if (clue.label) btn.setAttribute("aria-label", clue.label);
+
+        // 클릭 시 힌트 팝업
         btn.addEventListener("click", () => showCluePopup(clue.text));
 
         container.appendChild(btn);
@@ -286,6 +315,89 @@ function showCluePopup(text) {
 
 function closeCluePopup() {
     document.getElementById("clue-popup").classList.add("hidden");
+}
+
+// ---------- [추가] 좌표 측정 도구 ----------
+// 사용법: 사건 화면 주소 끝에 &debug=1 을 붙여서 열고,
+//        이미지에서 힌트로 쓸 물건 위를 마우스로 드래그해서 사각형을 그리면
+//        화면 위쪽에 "position" 값이 나타나고 클립보드에도 복사됩니다.
+//        그 값을 JSON의 해당 clue 안에 붙여넣으면 끝.
+function enableClueDebug() {
+    const stage = document.getElementById("clue-markers");
+    const area = document.querySelector(".scene-bg");
+
+    const box = document.createElement("div");
+    box.style.cssText =
+        "position:absolute;border:2px dashed #00e5ff;background:rgba(0,229,255,.25);" +
+        "pointer-events:none;z-index:999;display:none";
+    stage.appendChild(box);
+
+    const panel = document.createElement("div");
+    panel.style.cssText =
+        "position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;" +
+        "background:#000;color:#0ff;font:13px/1.5 monospace;padding:8px 14px;" +
+        "border-radius:8px;max-width:92vw;user-select:text;";
+    panel.textContent = "좌표 측정 모드: 물건 위를 드래그해 보세요";
+    document.body.appendChild(panel);
+
+    let startX = 0, startY = 0, drawing = false, moved = false;
+
+    const pointIn = (e) => {
+        const r = stage.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+
+    area.addEventListener("mousedown", (e) => {
+        if (e.target.closest(".arrow-btn, .story-box")) return;
+        e.preventDefault();
+        const p = pointIn(e);
+        startX = p.x;
+        startY = p.y;
+        drawing = true;
+        moved = false;
+        box.style.display = "block";
+        box.style.left = startX + "px";
+        box.style.top = startY + "px";
+        box.style.width = "0px";
+        box.style.height = "0px";
+    }, true);
+
+    window.addEventListener("mousemove", (e) => {
+        if (!drawing) return;
+        moved = true;
+        const p = pointIn(e);
+        box.style.left = Math.min(startX, p.x) + "px";
+        box.style.top = Math.min(startY, p.y) + "px";
+        box.style.width = Math.abs(p.x - startX) + "px";
+        box.style.height = Math.abs(p.y - startY) + "px";
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (!drawing) return;
+        drawing = false;
+        if (!moved) return;
+
+        const r = stage.getBoundingClientRect();
+        const pct = (v, total) => ((v / total) * 100).toFixed(1) + "%";
+        const text =
+            `"position": { "top": "${pct(parseFloat(box.style.top), r.height)}", ` +
+            `"left": "${pct(parseFloat(box.style.left), r.width)}", ` +
+            `"width": "${pct(parseFloat(box.style.width), r.width)}", ` +
+            `"height": "${pct(parseFloat(box.style.height), r.height)}" }`;
+
+        panel.textContent = text;
+        console.log(text);
+        if (navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+    });
+
+    // 드래그 직후 힌트 팝업이 열리지 않게 막기
+    area.addEventListener("click", (e) => {
+        if (moved) {
+            e.stopPropagation();
+            e.preventDefault();
+            moved = false;
+        }
+    }, true);
 }
 
 // ---------- 2단계: 범인 선택 화면 ----------
@@ -381,7 +493,19 @@ async function init() {
     }
 
     currentLevel = levelData;
+
+    // 이미지가 로드되거나 창 크기가 바뀔 때마다 힌트 구역 층을 이미지에 다시 맞춤
+    const bgImg = document.getElementById("bg-image");
+    bgImg.addEventListener("load", layoutClueLayer);
+    window.addEventListener("resize", layoutClueLayer);
+
     renderStoryScene(levelData);
+    layoutClueLayer(); // 이미 캐시된 이미지일 때 대비
+
+    // 주소 끝에 &debug=1 이 있으면 좌표 측정 도구 켜기
+    if (new URLSearchParams(location.search).get("debug") === "1") {
+        enableClueDebug();
+    }
 
     // 실시간 타이머 시작
     startTimer();
@@ -393,6 +517,7 @@ async function init() {
 
     document.getElementById("back-btn").addEventListener("click", () => {
         switchScene("scene-suspects", "scene-story");
+        layoutClueLayer(); // 다시 보일 때 크기 재계산
     });
 
     document.getElementById("check-btn").addEventListener("click", () => {
