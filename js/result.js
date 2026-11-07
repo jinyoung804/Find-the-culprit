@@ -45,7 +45,14 @@ async function initResultPage() {
 
   const result = JSON.parse(savedResult);
 
-  const { level, correctCount, totalCount, clueCount, caseCount } = result;
+  const {
+    level,
+    correctCount,
+    totalCount,
+    clueCount,
+    caseCount,
+    clearTime = 0,
+  } = result;
 
   const accuracy =
     totalCount > 0 ? Number(((correctCount / totalCount) * 100).toFixed(1)) : 0;
@@ -53,7 +60,7 @@ async function initResultPage() {
   const averageClues =
     caseCount > 0 ? Number((clueCount / caseCount).toFixed(1)) : 0;
 
-  const score = calculateRankingScore(correctCount, clueCount);
+  const score = calculateRankingScore(correctCount, clueCount, clearTime);
   const detectiveType = getDetectiveType(accuracy, averageClues);
 
   document.getElementById("type-english").textContent = detectiveType.english;
@@ -78,6 +85,7 @@ async function initResultPage() {
       correctCount,
       totalCount,
       clueCount,
+      clearTime,
     });
 
     saveMessage.textContent = saveResult.message;

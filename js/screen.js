@@ -167,6 +167,8 @@ let openedClueIds = new Set();
 
 let shouldMoveNext = false;
 
+let timerInterval = null;
+
 // ---------- 경로 헬퍼 ----------
 function getBackgroundPath(bgKey) {
   if (!bgKey) return DEFAULT_IMAGE;
@@ -453,12 +455,24 @@ function moveToNextScenario() {
 function finishLevel() {
   const { level } = getQueryParams();
 
+  // 게임 시작부터 레벨 완료까지 걸린 시간(초)
+  const startTime = Number(sessionStorage.getItem("startTime"));
+  const clearTime = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0;
+
+  // 타이머 종료 및 초기화
+  if (timerInterval) {
+    clearInterval(timerInterval);
+  }
+
+  sessionStorage.removeItem("startTime");
+
   const gameResult = {
     level: Number(level),
     correctCount,
     totalCount: totalAttempts,
     clueCount: totalClueCount,
     caseCount: levelDataList.length,
+    clearTime,
   };
 
   localStorage.setItem("gameResult", JSON.stringify(gameResult));
@@ -544,54 +558,13 @@ async function init() {
     alert("사건 데이터를 불러오지 못했습니다.");
     return;
   }
+
+  currentScenarioIndex = 0;
+  correctCount = 0;
+  totalAttempts = 0;
+  totalClueCount = 0;
+
   startTimer();
-  currentScenarioIndex = 0;
-  correctCount = 0;
-  totalAttempts = 0;
-  totalClueCount = 0;
-
-  showCurrentScenario();
-
-  document.getElementById("next-btn").addEventListener("click", () => {
-    renderSuspectScene(currentLevel);
-    switchScene("scene-story", "scene-suspects");
-  });
-
-  document.getElementById("back-btn").addEventListener("click", () => {
-    switchScene("scene-suspects", "scene-story");
-  });
-
-  document.getElementById("check-btn").addEventListener("click", () => {
-    checkAnswer(currentLevel);
-  });
-
-  document
-    .getElementById("clue-close")
-    .addEventListener("click", closeCluePopup);
-
-  document
-    .getElementById("result-close")
-    .addEventListener("click", closeResultPopup);
-}
-
-init();
-async function init() {
-  const { level, title } = getQueryParams();
-
-  initBgm(level);
-
-  levelDataList = await loadLevelScenarios(title, level);
-
-  if (levelDataList.length === 0) {
-    alert("사건 데이터를 불러오지 못했습니다.");
-    return;
-  }
-
-  currentScenarioIndex = 0;
-  correctCount = 0;
-  totalAttempts = 0;
-  totalClueCount = 0;
-
   showCurrentScenario();
 
   document.getElementById("next-btn").addEventListener("click", () => {
