@@ -3,7 +3,6 @@ const DEFAULT_IMAGE = IMAGE_DIR + "file.png";
 const AUDIO_DIR = "../assets/audio/";
 
 // ---------- 배경 이미지 매핑 ----------
-// 키는 소문자, 값은 assets/image 안의 "실제 파일명" (대소문자 정확히)
 const BACKGROUND_MAP = {
   radio: "radio.png",
   apartment: "apartment.png",
@@ -26,7 +25,6 @@ const KEY_ICON_MAP = {
 };
 
 // ---------- 용의자 아이콘 매핑 ----------
-// 키: JSON의 suspects[].id 또는 suspects[].icon 값 (소문자로 적기)
 const SUSPECT_ICON_MAP = {
   // level1 suspects[].id
   broadcast_member: "mike.png",
@@ -126,8 +124,7 @@ const SUSPECT_ICON_MAP = {
   test4: "test4.png",
 };
 
-// ---------- 열쇠 위치 (JSON에 clue.position이 없을 때 쓰는 기본값) ----------
-// 배경 이미지 기준 % 좌표. JSON에 position을 직접 넣으면 그쪽이 우선됨.
+// ---------- 열쇠 위치 ----------
 const CLUE_POSITION_MAP = {
   workshop: {
     key1: { top: "39%", left: "15%" },
@@ -194,7 +191,6 @@ function getCluePosition(clue, bgKey) {
   return { top: "50%", left: "50%" };
 }
 
-// 이미지가 깨지면 기본 이미지로 교체
 function setImageWithFallback(imgEl, path) {
   imgEl.onerror = () => {
     console.warn(`이미지를 찾을 수 없음: ${path}`);
@@ -202,6 +198,33 @@ function setImageWithFallback(imgEl, path) {
     imgEl.src = DEFAULT_IMAGE;
   };
   imgEl.src = path;
+}
+
+// ---------- 실시간 타이머 기능 ----------
+function startTimer() {
+  let startTime = sessionStorage.getItem("startTime");
+
+  if (!startTime) {
+    startTime = Date.now();
+    sessionStorage.setItem("startTime", startTime);
+  }
+
+  if (timerInterval) clearInterval(timerInterval);
+
+  timerInterval = setInterval(() => {
+    const elapsedTime = Math.floor((Date.now() - Number(startTime)) / 1000);
+
+    const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, "0");
+    const seconds = String(elapsedTime % 60).padStart(2, "0");
+    const timeString = `${minutes}:${seconds}`;
+
+    // 1단계(story-time)와 2단계(suspect-time) 두 텍스트 영역 모두 업데이트
+    const storyTimer = document.getElementById("story-time");
+    const suspectTimer = document.getElementById("suspect-time");
+
+    if (storyTimer) storyTimer.innerText = timeString;
+    if (suspectTimer) suspectTimer.innerText = timeString;
+  }, 1000);
 }
 
 // ---------- URL에서 level, title 읽기 ----------
@@ -521,7 +544,7 @@ async function init() {
     alert("사건 데이터를 불러오지 못했습니다.");
     return;
   }
-
+  startTimer();
   currentScenarioIndex = 0;
   correctCount = 0;
   totalAttempts = 0;
